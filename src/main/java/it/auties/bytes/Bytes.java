@@ -1,4 +1,4 @@
-package it.auties.buffer;
+package it.auties.bytes;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -9,124 +9,121 @@ import java.util.*;
 import java.util.stream.IntStream;
 
 import static java.lang.System.arraycopy;
+import static java.nio.ByteBuffer.allocate;
 import static java.nio.ByteBuffer.wrap;
 import static java.util.Arrays.copyOf;
 import static java.util.Arrays.copyOfRange;
 import static java.util.Base64.getDecoder;
 import static java.util.Base64.getEncoder;
 
-public class ByteBuffer {
+public class Bytes {
     private static final String NULLABLE_MESSAGE = "Cannot create buffer from string: only non-null values are allowed inside named constructor %s(%s). " +
             "Use %s(%s) instead if you want to accept nullable values";
     private static final HexFormat HEX_CODEC = HexFormat.of();
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
-    private static final int DEFAULT_EXPAND_SIZE = 32;
-    private static final int DEFAULT_EXPAND_MULTIPLIER = 4;
 
-    private byte[] buffer;
+    private java.nio.ByteBuffer buffer;
     private int readerIndex;
-    private int writerIndex;
 
-    private ByteBuffer(byte[] buffer, boolean moveToEnd){
-        this.buffer = buffer;
+    private Bytes(byte[] buffer){
+        this.buffer = wrap(buffer);
         this.readerIndex = 0;
-        this.writerIndex = moveToEnd ? buffer.length : 0;
     }
 
-    public static ByteBuffer newBuffer() {
-        return allocate(DEFAULT_EXPAND_SIZE * DEFAULT_EXPAND_MULTIPLIER);
-    }
-
-    public static ByteBuffer empty() {
+    public static Bytes newBuffer() {
         return of(0);
     }
 
-    public static ByteBuffer of(int size) {
+    public static Bytes of(int size) {
         return of(new byte[size]);
     }
 
-    public static ByteBuffer of(byte... input) {
-        return new ByteBuffer(input, true);
+    public static Bytes of(byte... input) {
+        return new Bytes(input);
     }
 
-    public static ByteBuffer of(byte[]... input) {
+    public static Bytes of(byte[]... input) {
         return Arrays.stream(input)
-                .map(ByteBuffer::of)
-                .reduce(empty(), ByteBuffer::append);
+                .map(Bytes::of)
+                .reduce(newBuffer(), Bytes::append);
     }
 
-    public static ByteBuffer of(String input) {
+    public static Bytes of(String input) {
         Objects.requireNonNull(input, NULLABLE_MESSAGE.formatted("of", "String", "ofNullable", "String"));
         return ofNullable(input);
     }
 
-    public static ByteBuffer ofNullable(String input) {
+    public static Bytes ofNullable(String input) {
         return of(input.getBytes(StandardCharsets.UTF_8));
     }
 
-    public static ByteBuffer ofBase64(String input) {
+    public static Bytes ofBase64(String input) {
         Objects.requireNonNull(input, NULLABLE_MESSAGE.formatted("ofBase64", "String", "ofNullable", "ofBase64"));
         return ofNullableBase64(input);
     }
 
-    public static ByteBuffer ofNullableBase64(String input) {
+    public static Bytes ofNullableBase64(String input) {
         return of(getDecoder().decode(input));
     }
 
-    public static ByteBuffer ofHex(String input) {
+    public static Bytes ofHex(String input) {
         Objects.requireNonNull(input, NULLABLE_MESSAGE.formatted("ofHex", "String", "ofNullable", "ofHex"));
         return ofNullableHex(input);
     }
 
-    public static ByteBuffer ofNullableHex(String input) {
+    public static Bytes ofNullableHex(String input) {
         return of(HEX_CODEC.parseHex(input));
     }
 
-    public static ByteBuffer random(int length) {
+    public static Bytes ofRandom(int length) {
         var bytes = new byte[length];
         SECURE_RANDOM.nextBytes(bytes);
         return of(bytes);
     }
 
-    public static ByteBuffer allocate(int length) {
-        return new ByteBuffer(new byte[length], false);
-    }
-
-    public ByteBuffer prepend(ByteBuffer array) {
+    public Bytes prepend(Bytes array) {
         Objects.requireNonNull(array, NULLABLE_MESSAGE.formatted("prepend", "ByteBuffer", "prependNullable", "ByteBuffer"));
         return prependNullable(array);
     }
 
-    public ByteBuffer prependNullable(ByteBuffer array) {
+    public Bytes prependNullable(Bytes array) {
         return array == null ? copy() :
                 prependNullable(array.toByteArray());
     }
 
-    public ByteBuffer prepend(byte... array) {
+    public Bytes prepend(byte... array) {
         Objects.requireNonNull(array, NULLABLE_MESSAGE.formatted("prepend", "byte...", "prependNullable", "byte..."));
         return prependNullable(array);
     }
 
-    public ByteBuffer prependNullable(byte... array) {
+    public Bytes prependNullable(byte... array) {
         return of(array).appendNullable(this);
     }
 
-    public ByteBuffer append(ByteBuffer array) {
+    public Bytes append(Bytes array) {
         Objects.requireNonNull(array, NULLABLE_MESSAGE.formatted("append", "ByteBuffer", "appendNullable", "ByteBuffer"));
         return appendNullable(array);
     }
 
-    public ByteBuffer appendNullable(ByteBuffer array) {
+    public Bytes appendNullable(Bytes array) {
         return array == null ? copy()
                 : appendNullable(array.toByteArray());
     }
 
-    public ByteBuffer append(byte... array) {
+    public Bytes append(int... array) {
+        return append(ByteUtils.toBytes(array));
+    }
+
+    public Bytes append(byte... array) {
         Objects.requireNonNull(array, NULLABLE_MESSAGE.formatted("append", "byte...", "appendNullable", "byte..."));
         return appendNullable(array);
     }
 
-    public ByteBuffer appendNullable(byte... array) {
+    public Bytes appendNullable(int... array) {
+        return appendNullable(ByteUtils.toBytes(array));
+    }
+
+    public Bytes appendNullable(byte... array) {
         if(array == null){
             return copy();
         }
@@ -136,34 +133,34 @@ public class ByteBuffer {
         return of(result);
     }
 
-    public ByteBuffer cut(int end) {
+    public Bytes cut(int end) {
         return slice(0, end);
     }
 
-    public ByteBuffer slice(int start) {
+    public Bytes slice(int start) {
         return slice(start, size());
     }
 
-    public ByteBuffer slice(int start, int end) {
+    public Bytes slice(int start, int end) {
         return of(copyOfRange(toByteArray(), start >= 0 ? start : size() + start, end >= 0 ? end : size() + end));
     }
 
-    public ByteBuffer fill(char value) {
+    public Bytes fill(char value) {
         return fill((int) value);
     }
 
-    public ByteBuffer fill(Number value) {
+    public Bytes fill(Number value) {
         return fill(value, size());
     }
 
-    public ByteBuffer fill(char value, int length) {
+    public Bytes fill(char value, int length) {
         return fill((int) value, length);
     }
 
-    public ByteBuffer fill(Number value, int length) {
+    public Bytes fill(Number value, int length) {
         var result = new byte[size()];
         for(var index = 0; index < size(); index++){
-            var entry = buffer[index];
+            var entry = buffer.get(index);
             result[index] = index < length && entry == 0 ? (byte) value : entry;
         }
 
@@ -172,7 +169,7 @@ public class ByteBuffer {
 
     public Optional<Byte> at(int index){
         return size() <= index ? Optional.empty()
-                : Optional.of(buffer[index]);
+                : Optional.of(buffer.get(index));
     }
 
     public OptionalInt indexOf(char entry) {
@@ -185,7 +182,7 @@ public class ByteBuffer {
                 .findFirst();
     }
 
-    public ByteBuffer assertSize(int size) {
+    public Bytes assertSize(int size) {
         if(size != size()) {
             throw new AssertionError("Erroneous bytebuffer size: expected %s, got %s".formatted(size, size()));
         }
@@ -193,130 +190,50 @@ public class ByteBuffer {
         return this;
     }
 
-    public ByteBuffer writeByte(int input){
-        return writeByte(input, writerIndex);
-    }
-    
-    public ByteBuffer writeByte(int input, int index){
-        return writeBytes(new byte[]{(byte) input}, index);
+    public Bytes appendUnsignedByte(int input){
+        return appendInt(Byte.toUnsignedInt((byte) input));
     }
 
-    public ByteBuffer writeUnsignedByte(int input){
-        return writeUnsignedByte(input, writerIndex);
-    }
-
-    public ByteBuffer writeUnsignedByte(int input, int index){
-        return writeInt(Byte.toUnsignedInt((byte) input), index);
-    }
-
-    public ByteBuffer writeShort(int input){
-        return writeShort(input, writerIndex);
-    }
-
-    public ByteBuffer writeShort(int input, int index){
-        var bytes = java.nio.ByteBuffer.allocate(2)
+    public Bytes appendShort(int input){
+        var bytes = allocate(2)
                 .putShort((short) input)
                 .array();
-        writeBytes(bytes, index);
-        return this;
+        return append(bytes);
     }
 
-    public ByteBuffer writeUnsignedShort(short input){
-        return writeUnsignedShort(input, writerIndex);
+    public Bytes appendUnsignedShort(short input){
+        return appendInt(Short.toUnsignedInt(input));
     }
 
-    public ByteBuffer writeUnsignedShort(short input, int index){
-        return writeInt(Short.toUnsignedInt(input), index);
-    }
-
-    public ByteBuffer writeInt(int input){
-        return writeInt(input, writerIndex);
-    }
-
-    public ByteBuffer writeInt(int input, int index){
-        var bytes = java.nio.ByteBuffer.allocate(4)
+    public Bytes appendInt(int input){
+        var bytes = allocate(4)
                 .putInt(input)
                 .array();
-        writeBytes(bytes, index);
-        return this;
+        return append(bytes);
     }
 
-    public ByteBuffer writeUnsignedInt(int input){
-        return writeUnsignedInt(input, writerIndex);
+    public Bytes appendUnsignedInt(int input){
+        return appendLong(Integer.toUnsignedLong(input));
     }
 
-    public ByteBuffer writeUnsignedInt(int input, int index){
-        return writeLong(Integer.toUnsignedLong(input), index);
-    }
-
-    public ByteBuffer writeLong(long input){
-        return writeLong(input, writerIndex);
-    }
-
-    public ByteBuffer writeLong(long input, int index){
-        var bytes = java.nio.ByteBuffer.allocate(8)
+    public Bytes appendLong(long input){
+        var bytes = allocate(8)
                 .putLong(input)
                 .array();
-        writeBytes(bytes, index);
-        return this;
+        return append(bytes);
     }
 
-    public ByteBuffer writeUnsignedLong(long input){
-        return writeUnsignedLong(input, writerIndex);
+    public Bytes appendUnsignedLong(long input){
+        return appendBigInt(ByteUtils.toUnsignedBigInteger(input));
     }
 
-    public ByteBuffer writeUnsignedLong(long input, int index){
-        return writeBigInt(toUnsignedBigInteger(input), index);
-    }
-
-    // From java.lang.Long#toUnsignedBigInteger, has private access
-    private BigInteger toUnsignedBigInteger(long i) {
-        if (i >= 0L) {
-            return BigInteger.valueOf(i);
-        }
-        
-        var upper = (int) (i >>> 32);
-        var lower = (int) i;
-        return (BigInteger.valueOf(Integer.toUnsignedLong(upper)))
-                .shiftLeft(32)
-                .add(BigInteger.valueOf(Integer.toUnsignedLong(lower)));
-    }
-
-    public ByteBuffer writeBigInt(BigInteger input) {
-        return writeBigInt(input, writerIndex);
-    }
-
-    public ByteBuffer writeBigInt(BigInteger input, int index) {
+    public Bytes appendBigInt(BigInteger input) {
         Objects.requireNonNull(input, NULLABLE_MESSAGE.formatted("writeBigInt", "BigInteger,int", "writeBigInt", "BigInteger,int"));
-        return writeNullableBigInt(input, index);
+        return appendNullableBigInt(input);
     }
 
-    public ByteBuffer writeNullableBigInt(BigInteger input) {
-        return writeNullableBigInt(input, writerIndex);
-    }
-
-    public ByteBuffer writeNullableBigInt(BigInteger input, int index) {
-        writeBytes(input.toByteArray(), index);
-        return this;
-    }
-
-    public ByteBuffer writeBytes(byte[] bytes) {
-        return writeBytes(bytes, writerIndex);
-    }
-
-    public ByteBuffer writeBytes(byte[] bytes, int index) {
-        Objects.requireNonNull(bytes, NULLABLE_MESSAGE.formatted("writeBytes", "byte[],int", "writeNullableBytes", "byte[],int"));
-        return writeNullableBytes(bytes, index);
-    }
-
-    public ByteBuffer writeNullableBytes(byte[] bytes, int index) {
-        checkEOS(index, bytes.length);
-        for(int inputIndex = 0, bufferIndex = index; inputIndex < bytes.length; inputIndex++, bufferIndex++){
-            buffer[bufferIndex] = bytes[inputIndex];
-        }
-
-        step(bytes.length, false);
-        return this;
+    public Bytes appendNullableBigInt(BigInteger input) {
+        return append(input.toByteArray());
     }
 
     public byte readByte(){
@@ -391,11 +308,11 @@ public class ByteBuffer {
         return new BigInteger(readBytes(index, length));
     }
 
-    public ByteBuffer readBuffer(int length) {
+    public Bytes readBuffer(int length) {
         return of(readBytes(readerIndex, length));
     }
 
-    public ByteBuffer readBuffer(int index, int length) {
+    public Bytes readBuffer(int index, int length) {
         return of(readBytes(index, length));
     }
 
@@ -405,76 +322,65 @@ public class ByteBuffer {
 
     public byte[] readBytes(int index, int length) {
         var result = new byte[length];
-        System.arraycopy(buffer, index, result, 0, length);
-        step(length, true);
+        buffer.get(index, result);
+        if(index == readerIndex) {
+            step(length);
+        }
+
         return result;
     }
 
-    private void checkEOS(int index, int delta){
-        if (index + delta < size()) {
-            return;
-        }
-
-        var reservedSpace = Math.max(delta, DEFAULT_EXPAND_SIZE) + (DEFAULT_EXPAND_SIZE * DEFAULT_EXPAND_MULTIPLIER);
-        this.buffer = copyOf(buffer, size() + reservedSpace);
-    }
-
-    private int step(int delta, boolean read){
-        var oldCounter = read ? readerIndex : writerIndex;
-        if(read){
-            this.readerIndex = oldCounter + delta;
-        }else {
-            this.writerIndex = oldCounter + delta;
-        }
-
-        return oldCounter;
+    private void step(int delta){
+        this.readerIndex = readerIndex + delta;
     }
 
     public int size(){
-        return buffer.length;
-    }
-
-    public int readableBytes(){
-        return Math.max(size() - readerIndex, 0);
-    }
-
-    public int writableBytes(){
-        return Math.max(size() - writerIndex, 0);
+        return buffer.capacity();
     }
 
     public boolean isReadable(){
         return size() - readerIndex > 0;
     }
 
-    public boolean isWritable(){
-        return size() - writerIndex > 0;
-    }
-
     public byte[] toByteArray(){
-        return Arrays.copyOfRange(buffer, 0, writerIndex);
+        return buffer.array();
     }
 
     public java.nio.ByteBuffer toNioBuffer(){
         return wrap(toByteArray());
     }
 
-    public ByteBuffer copy(){
+    public Bytes copy(){
         var bytes = toByteArray();
         return of(Arrays.copyOf(bytes, bytes.length));
     }
 
-    public ByteBuffer clear(){
-        for(var index = 0; index < size(); index++){
-            buffer[index] = 0;
-        }
+    public Bytes setBytes(byte[] input){
+        Objects.requireNonNull(input, NULLABLE_MESSAGE.formatted("setBytes", "byte[]", "setNullableBytes", "byte[]"));
+        return setNullableBytes(input);
+    }
 
+    public Bytes setNullableBytes(byte[] input){
+        this.buffer = wrap(input);
         this.readerIndex = 0;
-        this.writerIndex = 0;
         return this;
     }
 
-    public ByteBuffer remaining(){
+    public Bytes clear(){
+        for(var index = 0; index < size(); index++){
+            buffer.put(index, (byte) 0);
+        }
+
+        this.readerIndex = 0;
+        return this;
+    }
+
+    public Bytes remaining(){
         return of(readBytes(readerIndex, size() - readerIndex));
+    }
+
+    public int readableBytes(){
+        return Math.max(size() - readerIndex, 0);
     }
 
     @Override
@@ -499,7 +405,7 @@ public class ByteBuffer {
     @Override
     public boolean equals(Object other) {
         return this == other
-                || (other instanceof ByteBuffer that && Arrays.equals(toByteArray(), that.toByteArray()));
+                || (other instanceof Bytes that && Arrays.equals(toByteArray(), that.toByteArray()));
     }
 
     public boolean contentEquals(Object other){
