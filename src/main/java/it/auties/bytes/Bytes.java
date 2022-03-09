@@ -31,10 +31,10 @@ public class Bytes {
     }
 
     public static Bytes newBuffer() {
-        return of(0);
+        return newBuffer(0);
     }
 
-    public static Bytes of(int size) {
+    public static Bytes newBuffer(int size) {
         return of(new byte[size]);
     }
 
@@ -158,10 +158,11 @@ public class Bytes {
     }
 
     public Bytes fill(Number value, int length) {
+        Objects.requireNonNull(value, "Cannot fill bytes with a null value");
         var result = new byte[size()];
         for(var index = 0; index < size(); index++){
             var entry = buffer.get(index);
-            result[index] = index < length && entry == 0 ? (byte) value : entry;
+            result[index] = index < length && entry == 0 ? value.byteValue() : entry;
         }
 
         return of(result);
